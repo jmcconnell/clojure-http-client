@@ -1,7 +1,8 @@
 (ns clojure.http.client
   (:use [clojure.contrib.java-utils :only [as-str]]
         [clojure.contrib.duck-streams :only [read-lines spit]]
-        [clojure.contrib.str-utils :only [str-join]])
+        [clojure.contrib.str-utils :only [str-join]]
+        [clojure.contrib.test-is :only [with-test is]])
   (:import (java.net URL URLEncoder)
            (java.io StringReader InputStream)))
 
@@ -70,18 +71,33 @@ or the error stream of connection, whichever is appropriate."
                                 {k (first (val e))}))
                       hs))))
 
-(defn- parse-cookies
-  "Returns a map of cookies when given the Set-Cookie string sent
-by a server."
-  [cookie-string]
-  (when cookie-string
-    (apply merge
-           (map (fn [cookie]
-                  (apply hash-map
-                         (map (fn [c]
-                                (.trim c))
-                              (.split cookie "="))))
-                (.split cookie-string ";")))))
+(with-test
+  (defn- get-pair
+    "Returns the pair '(\"test\" \"val\") for the string \"test=val\", or
+    '(\"test\" nil) if no val is present."
+    [s]
+    (take 2 (conj (vec (.split s "=")) nil)))
+
+  (is (= '("test" "val") (get-pair "test=val")))
+  (is (= '("test" nil) (get-pair "test=")))
+  (is (= '("test" nil) (get-pair "test"))))
+
+(with-test
+  (defn- parse-cookies
+    "Returns a map of cookies when given the Set-Cookie string sent
+    by a server."
+    [cookie-string]
+    (when cookie-string
+      (apply merge
+             (map (fn [cookie]
+                    (apply hash-map
+                           (map (fn [c]
+                                  (when c (.trim c)))
+                                (get-pair cookie))))
+                  (.split cookie-string ";")))))
+
+  (is (= { "test1" "val1" "test2" "val2" "httponly" nil }
+         (parse-cookies "test1=val1; test2=val2; httponly"))))
 
 (defn- create-cookie-string
   "Returns a string suitable for sending to the server in the
